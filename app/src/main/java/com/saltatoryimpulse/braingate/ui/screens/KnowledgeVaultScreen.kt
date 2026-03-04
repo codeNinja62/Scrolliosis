@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,10 +49,22 @@ fun KnowledgeVaultScreen(onBack: () -> Unit) {
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
     var entryToDelete by remember { mutableStateOf<KnowledgeEntry?>(null) }
+    // BUG-04: flag to show the "add custom prompt" dialog
+    var showAddDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = BackgroundDark,
-        topBar = { BrainGateTopBar(onBack = onBack, title = "REFLECTION LOG") }
+        topBar = { BrainGateTopBar(onBack = onBack, title = "KNOWLEDGE VAULT") },
+        // BUG-04: FAB lets users write their own prompts that appear in the Gatekeeper
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = PrimaryAccent,
+                contentColor = BackgroundDark
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = "Add knowledge prompt")
+            }
+        }
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             if (history.isEmpty()) {
@@ -94,6 +108,23 @@ fun KnowledgeVaultScreen(onBack: () -> Unit) {
             }
         }
     )
+
+    // BUG-04: dialog for adding user-authored knowledge prompts to the vault
+    if (showAddDialog) {
+        AddPromptDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { title, body ->
+                scope.launch {
+                    withContext(Dispatchers.IO + NonCancellable) {
+                        repository.insertEntry(
+                            KnowledgeEntry(title = title, summary = body, isCustomPrompt = true)
+                        )
+                    }
+                    showAddDialog = false
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -152,13 +183,13 @@ private fun EmptyVaultState() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "THE LOG IS EMPTY",
+            text = "THE VAULT IS EMPTY",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
             color = TextMediumEmphasis
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Your mindful reflections will appear here after you unlock a gate.",
+            text = "Tap + to write your own prompts — facts, goals, or questions that challenge you at the gate. Reflections saved during unlocks also appear here.",
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
             color = TextMediumEmphasis.copy(alpha = 0.7f)
@@ -186,4 +217,70 @@ private fun DeleteEntryDialog(entry: KnowledgeEntry?, onDismiss: () -> Unit, onC
             }
         )
     }
+}
+
+// BUG-04: dialog for writing a user-authored knowledge prompt.
+// "Title" = the label shown in the gatekeeper header (e.g. "Spanish Vocab", "Daily Goal").
+// "Prompt" = the text shown to you at the gate — a question, fact, or challenge.
+@Composable
+private fun AddPromptDialog(onDismiss: () -> Unit, onConfirm: (title: String, body: String) -> Unit) {
+    var title by remember { mutableStateOf("") }
+    var body by remember { mutableStateOf("") }
+    val canSave = title.isNotBlank() && body.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceDark,
+        title = {
+            Text("ADD KNOWLEDGE PROMPT", fontWeight = FontWeight.Bold, color = TextHighEmphasis)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Write a prompt that will challenge you before accessing a blocked app.",
+                    color = TextMediumEmphasis,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Label (e.g. \"Daily Goal\")", color = TextMediumEmphasis) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryAccent,
+                        unfocusedBorderColor = OutlineSubtle,
+                        focusedTextColor = TextHighEmphasis,
+                        unfocusedTextColor = TextHighEmphasis,
+                        focusedContainerColor = BackgroundDark,
+                        unfocusedContainerColor = BackgroundDark
+                    )
+                )
+                OutlinedTextField(
+                    value = body,
+                    onValueChange = { body = it },
+                    label = { Text("Your prompt or question", color = TextMediumEmphasis) },
+                    minLines = 3,
+                    maxLines = 6,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryAccent,
+                        unfocusedBorderColor = OutlineSubtle,
+                        focusedTextColor = TextHighEmphasis,
+                        unfocusedTextColor = TextHighEmphasis,
+                        focusedContainerColor = BackgroundDark,
+                        unfocusedContainerColor = BackgroundDark
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(title.trim(), body.trim()) }, enabled = canSave) {
+                Text("SAVE PROMPT", color = if (canSave) PrimaryAccent else TextMediumEmphasis.copy(alpha = 0.4f), fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL", color = TextMediumEmphasis)
+            }
+        }
+    )
 }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,12 +46,40 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun AppSelectionScreen(onBack: () -> Unit) {
-    BackHandler { onBack() }
-
     val context = LocalContext.current
     val pm = context.packageManager
     val repository: IKnowledgeRepository = get()
     val scope = rememberCoroutineScope()
+
+    // Declare early so BackHandler priority chain can reference it directly (no LaunchedEffect lag)
+    var appToUnblock by remember { mutableStateOf<BlockedApp?>(null) }
+
+    // BUG-05: increment to force a re-fetch whenever the OS package list changes
+    var cacheRefreshKey by remember { mutableStateOf(0) }
+
+    // BUG-05: register a package-change receiver for the lifetime of this screen
+    DisposableEffect(context) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(ctx: android.content.Context?, intent: Intent?) {
+                AppCache.invalidate()
+                cacheRefreshKey++
+            }
+        }
+        val filter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        }
+        context.registerReceiver(receiver, filter)
+        onDispose { try { context.unregisterReceiver(receiver) } catch (_: Exception) {} }
+    }
+
+    // BUG-02: When the cooldown dialog is open, Back closes it (cancel path).
+    // This BackHandler has higher priority (declared first) than the screen-level one below,
+    // so Back cannot skip the 30-second wait by navigating away from the screen.
+    BackHandler(enabled = appToUnblock != null) { appToUnblock = null }
+    BackHandler { onBack() }
 
     val blockedApps by repository.getBlockedApps().collectAsState(initial = emptyList())
     val blockedPackageNames = remember(blockedApps) { blockedApps.map { it.packageName }.toSet() }
@@ -61,8 +90,6 @@ fun AppSelectionScreen(onBack: () -> Unit) {
 
     var activeGates by remember { mutableStateOf<List<AppListItem>>(emptyList()) }
     var availableApps by remember { mutableStateOf<List<AppListItem>>(emptyList()) }
-
-    var appToUnblock by remember { mutableStateOf<BlockedApp?>(null) }
 
     // THE CACHE: UPGRADED to 200 to handle large device app libraries comfortably
     val iconCache = remember { LruCache<String, Drawable>(200) }
@@ -80,7 +107,8 @@ fun AppSelectionScreen(onBack: () -> Unit) {
     }
 
     // TIER 1 WARM-UP: INSTANT METADATA RETRIEVAL
-    LaunchedEffect(Unit) {
+    // BUG-05: also re-runs whenever cacheRefreshKey increments (package added/removed)
+    LaunchedEffect(cacheRefreshKey) {
         withContext(Dispatchers.IO) {
             installedApps = AppCache.getInstalledApps(pm)
             withContext(Dispatchers.Main) {
@@ -344,7 +372,9 @@ private fun AppRow(
 
             Switch(
                 checked = isBlocked,
-                onCheckedChange = onCheckedChange,
+                // BUG-13: null makes Switch visual-only; Surface.onClick is the sole tap handler,
+                // preventing the double-fire that caused state flicker when tapping the toggle.
+                onCheckedChange = null,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = PrimaryAccent,
                     checkedTrackColor = PrimaryAccent.copy(alpha = 0.3f),
@@ -362,7 +392,11 @@ fun CooldownDialog(
     onConfirm: () -> Unit,
     onCancel: () -> Unit
 ) {
-    var timeLeft by remember { mutableStateOf(30) }
+    // BUG-01: rememberSaveable survives configuration changes (rotation) so the
+    // 30-second wait cannot be reset by flipping the device.
+    var timeLeft by rememberSaveable { mutableStateOf(30) }
+    // BUG-02: consume Back inside the dialog so it can only cancel, not bypass the timer
+    BackHandler(enabled = true) { onCancel() }
 
     LaunchedEffect(Unit) {
         while (timeLeft > 0) {
@@ -402,7 +436,14 @@ fun CooldownDialog(
                 }
             }
         },
+        // BUG-09: safe action (keep blocked) is the primary / visually dominant confirmButton.
+        // Destructive action (unblock) is relegated to dismissButton (left-aligned, less weight).
         confirmButton = {
+            TextButton(onClick = onCancel) {
+                Text("KEEP IT BLOCKED", color = PrimaryAccent, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
             TextButton(
                 onClick = onConfirm,
                 enabled = timeLeft == 0
@@ -412,11 +453,6 @@ fun CooldownDialog(
                     color = if (timeLeft == 0) ErrorRed else TextMediumEmphasis.copy(alpha = 0.5f),
                     fontWeight = FontWeight.Bold
                 )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) {
-                Text("KEEP IT BLOCKED", color = PrimaryAccent, fontWeight = FontWeight.Bold)
             }
         }
     )
@@ -431,6 +467,9 @@ data class AppListItem(
 // The Singleton Cache Engine
 object AppCache {
     private var cachedApps: List<AppListItem>? = null
+
+    /** BUG-05: called when packages are installed or removed so the list never goes stale. */
+    fun invalidate() { cachedApps = null }
 
     suspend fun getInstalledApps(pm: PackageManager): List<AppListItem> {
         // If already loaded in RAM, return instantly (0ms)

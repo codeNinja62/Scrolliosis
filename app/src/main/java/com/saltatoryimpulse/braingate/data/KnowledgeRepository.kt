@@ -16,6 +16,8 @@ class KnowledgeRepository(private val dao: KnowledgeDao) : IKnowledgeRepository 
     override suspend fun insertEntry(entry: KnowledgeEntry) = dao.insertEntry(entry)
     override suspend fun deleteEntry(entry: KnowledgeEntry) = dao.deleteEntry(entry)
 
+    override suspend fun getRandomCustomPrompt(): KnowledgeEntry? = dao.getRandomCustomPrompt()
+
     override suspend fun blockApp(app: BlockedApp) = dao.blockApp(app)
     override suspend fun unblockApp(app: BlockedApp) = dao.unblockApp(app)
 

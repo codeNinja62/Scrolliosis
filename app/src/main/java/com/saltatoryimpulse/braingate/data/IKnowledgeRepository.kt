@@ -14,6 +14,9 @@ interface IKnowledgeRepository {
     suspend fun insertEntry(entry: KnowledgeEntry)
     suspend fun deleteEntry(entry: KnowledgeEntry)
 
+    // BUG-04: returns a random user-authored knowledge prompt, or null if none exist yet
+    suspend fun getRandomCustomPrompt(): KnowledgeEntry?
+
     suspend fun blockApp(app: BlockedApp)
     suspend fun unblockApp(app: BlockedApp)
 

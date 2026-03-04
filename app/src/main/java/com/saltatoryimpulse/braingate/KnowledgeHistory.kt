@@ -13,7 +13,9 @@ data class KnowledgeEntry(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     @ColumnInfo(name = "title") val title: String,
     @ColumnInfo(name = "summary") val summary: String,
-    @ColumnInfo(name = "timestamp") val timestamp: Long = System.currentTimeMillis()
+    @ColumnInfo(name = "timestamp") val timestamp: Long = System.currentTimeMillis(),
+    // BUG-04: distinguishes user-authored knowledge prompts from auto-saved reflections
+    @ColumnInfo(name = "is_custom_prompt", defaultValue = "0") val isCustomPrompt: Boolean = false
 )
 
 @Keep
@@ -34,6 +36,10 @@ interface KnowledgeDao {
     @Delete
     suspend fun deleteEntry(entry: KnowledgeEntry)
 
+    // BUG-04: returns only user-authored knowledge prompts, ordered randomly for variety
+    @Query("SELECT * FROM knowledge_vault WHERE is_custom_prompt = 1 ORDER BY RANDOM() LIMIT 1")
+    suspend fun getRandomCustomPrompt(): KnowledgeEntry?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun blockApp(app: BlockedApp)
 
@@ -47,7 +53,7 @@ interface KnowledgeDao {
     suspend fun isAppBlocked(pkg: String): Boolean
 }
 
-@Database(entities = [KnowledgeEntry::class, BlockedApp::class], version = 2, exportSchema = false)
+@Database(entities = [KnowledgeEntry::class, BlockedApp::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun knowledgeDao(): KnowledgeDao
 

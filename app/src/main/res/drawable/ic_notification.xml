@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!--
+        BrainGate notification icon — monochrome brain outline.
+        Status-bar icons must be pure white on transparent; the system tints them.
+    -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,3C8.5,3 5.73,5.46 5.73,8.5C5.73,9.86 6.25,11.1 7.1,12.04
+                          C6.43,12.56 6,13.37 6,14.25C6,15.47 6.72,16.52 7.75,17.04
+                          L7.75,19C7.75,20.1 8.65,21 9.75,21L14.25,21
+                          C15.35,21 16.25,20.1 16.25,19L16.25,17.04
+                          C17.28,16.52 18,15.47 18,14.25C18,13.37 17.57,12.56 16.9,12.04
+                          C17.75,11.1 18.27,9.86 18.27,8.5C18.27,5.46 15.5,3 12,3Z
+                          M12,5C14.35,5 16.27,6.54 16.27,8.5
+                          C16.27,9.58 15.78,10.55 15,11.2
+                          L14.5,11.62L15,12.08C15.6,12.6 16,13.38 16,14.25
+                          C16,15.22 15.36,16.03 14.46,16.32L14.25,16.39L14.25,19
+                          L9.75,19L9.75,16.39L9.54,16.32C8.64,16.03 8,15.22 8,14.25
+                          C8,13.38 8.4,12.6 9,12.08L9.5,11.62L9,11.2
+                          C8.22,10.55 7.73,9.58 7.73,8.5C7.73,6.54 9.65,5 12,5Z" />
+</vector>

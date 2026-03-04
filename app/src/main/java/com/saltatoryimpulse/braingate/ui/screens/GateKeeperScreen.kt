@@ -7,6 +7,8 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +31,7 @@ import org.koin.androidx.compose.get
 import com.saltatoryimpulse.braingate.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -38,8 +41,9 @@ fun GatekeeperScreen(
     onUnlockSuccess: (String) -> Unit,
     onCloseApp: () -> Unit
 ) {
-    // SYSTEM TRAP: Disables back button/gestures on all Android versions
-    BackHandler(enabled = true) { /* Locked by design */ }
+    // BUG-08: state for shake animation + hint text (BackHandler registered after triggerHapticPulse)
+    val shakeOffset = remember { Animatable(0f) }
+    var lockedHintVisible by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val pm = context.packageManager
@@ -70,6 +74,22 @@ fun GatekeeperScreen(
         } catch (e: Exception) { /* Silent fail for hardware compatibility */ }
     }
 
+    // SYSTEM TRAP: Disables back button/gestures on all Android versions.
+    // BUG-08: no longer silent — shakes the lock icon + shows hint so users understand why nothing happened.
+    BackHandler(enabled = true) {
+        scope.launch {
+            lockedHintVisible = true
+            triggerHapticPulse(100, 30)
+            repeat(3) {
+                shakeOffset.animateTo(12f, tween(60))
+                shakeOffset.animateTo(-12f, tween(60))
+            }
+            shakeOffset.animateTo(0f, tween(60))
+            delay(2000)
+            lockedHintVisible = false
+        }
+    }
+
     val appName = remember {
         try {
             val info = pm.getApplicationInfo(targetPackage, PackageManager.GET_META_DATA)
@@ -77,7 +97,7 @@ fun GatekeeperScreen(
         } catch (e: Exception) { "Distraction" }
     }
 
-    val prompts = remember {
+    val defaultPrompts = remember {
         listOf(
             "What thought was in your head right before you tapped this app?",
             "What are you hoping to find in $appName right now?",
@@ -85,7 +105,17 @@ fun GatekeeperScreen(
             "How do you expect your mood to change after 5 minutes of this?"
         )
     }
-    val currentPrompt = remember { prompts.random() }
+
+    // BUG-04: prefer user-authored knowledge prompts; fall back to defaults if vault is empty
+    var currentPrompt by remember { mutableStateOf(defaultPrompts.random()) }
+    var promptLabel by remember { mutableStateOf("MINDFULNESS CHECK") }
+    LaunchedEffect(Unit) {
+        val customPrompt = withContext(Dispatchers.IO) { repository.getRandomCustomPrompt() }
+        if (customPrompt != null) {
+            currentPrompt = customPrompt.summary
+            promptLabel = customPrompt.title
+        }
+    }
 
     var reflectionText by remember { mutableStateOf("") }
     val minCharacters = 80
@@ -108,12 +138,26 @@ fun GatekeeperScreen(
     ) {
         Spacer(modifier = Modifier.height(48.dp))
 
-        Icon(
-            imageVector = Icons.Rounded.Lock,
-            contentDescription = "Locked",
-            tint = PrimaryAccent,
-            modifier = Modifier.size(64.dp)
-        )
+    Icon(
+                imageVector = Icons.Rounded.Lock,
+                contentDescription = "Locked",
+                tint = PrimaryAccent,
+                modifier = Modifier
+                    .size(64.dp)
+                    .offset(x = shakeOffset.value.dp)  // BUG-08: shake on back press
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // BUG-08: hint text that fades in when user tries to back out
+            if (lockedHintVisible) {
+                Text(
+                    text = "Complete the reflection to proceed",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ErrorRed,
+                    textAlign = TextAlign.Center
+                )
+            }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -137,7 +181,7 @@ fun GatekeeperScreen(
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    text = "MINDFULNESS CHECK",
+                    text = promptLabel,
                     style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.5.sp),
                     color = PrimaryAccent,
                     fontWeight = FontWeight.Bold
@@ -155,10 +199,16 @@ fun GatekeeperScreen(
 
         OutlinedTextField(
             value = reflectionText,
-            onValueChange = {
-                reflectionText = it
-                // Light tactile feedback for "friction" writing
-                if (it.length % 5 == 0) triggerHapticPulse(50, 10)
+            onValueChange = { newValue ->
+                // BUG-11: reject clipboard pastes by capping single-event length increase.
+                // Normal typing adds 1-2 chars; autocorrect replaces a word (~15 at most).
+                // A paste of 80+ chars trivially bypasses the friction — discard it silently.
+                val delta = newValue.length - reflectionText.length
+                if (delta <= 15) {
+                    reflectionText = newValue
+                    // Light tactile feedback for "friction" writing
+                    if (newValue.length % 5 == 0) triggerHapticPulse(50, 10)
+                }
             },
             modifier = Modifier.fillMaxWidth().height(160.dp),
             placeholder = {

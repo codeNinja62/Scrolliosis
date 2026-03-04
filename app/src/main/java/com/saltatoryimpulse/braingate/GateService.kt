@@ -132,14 +132,22 @@ class GateService : AccessibilityService(), KoinComponent {
             return false
         }
 
-        // Quick text check for "braingate" in the event text.
+        // BUG-10: only intercept if the screen mentions BOTH "braingate" AND "uninstall".
+        // Previously, any Settings page that showed the app name (e.g. App Info, Permissions)
+        // triggered a 120-second lockout. Now we require clear uninstall intent.
         val fastText = event.text.toString().lowercase()
-        if (fastText.contains("braingate")) return true
+        val hasBraingate = fastText.contains("braingate")
+        val hasUninstall = fastText.contains("uninstall")
 
-        // If not found, perform a deep node scan of the active window's view tree.
+        // Package installer is always an explicit uninstall flow
+        if (pkg.contains("packageinstaller") && hasBraingate) return true
+        // For other system settings, require BOTH keywords to avoid false positives
+        if (hasBraingate && hasUninstall) return true
+
+        // If not found in the quick scan, do a deep node scan for both keywords together.
         val rootNode = rootInActiveWindow ?: return false
         return try {
-            scanNodeForText(rootNode, "braingate")
+            scanNodeForText(rootNode, "braingate") && scanNodeForText(rootNode, "uninstall")
         } catch (e: Exception) {
             Log.w(Constants.TAG, "Error scanning accessibility node tree", e)
             false
@@ -293,7 +301,7 @@ class GateService : AccessibilityService(), KoinComponent {
         val notification = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Gate Active")
             .setContentText("Focus protection is enabled.")
-            .setSmallIcon(android.R.drawable.ic_secure)
+            .setSmallIcon(R.drawable.ic_notification)
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()

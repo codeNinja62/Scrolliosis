@@ -51,6 +51,9 @@ fun OnboardingScreen(
 
     // PERSISTENCE TRACKER: Prevents looping on OEMs that don't report status back to the OS
     var manufacturerStepAttempted by remember { mutableStateOf(false) }
+    // BUG-06: track whether notification permission was already attempted (granted OR denied)
+    // so the waterfall doesn't stall if the user refuses the permission dialog
+    var notifAttempted by remember { mutableStateOf(false) }
     var lastExecutionTime by remember { mutableLongStateOf(0L) }
 
     val batteryNeeded = !powerManager.isIgnoringBatteryOptimizations(context.packageName)
@@ -76,9 +79,8 @@ fun OnboardingScreen(
         val isAccessNeeded = !PermissionUtils.isAccessibilityServiceEnabled(context)
 
         when {
-            // STEP 1: NOTIFICATIONS
-            isNotifsNeeded -> { currentDialog = SetupStep.NONE }
-
+            // STEP 1: NOTIFICATIONS — only request if not yet attempted; skip gracefully if denied
+            isNotifsNeeded && !notifAttempted -> { currentDialog = SetupStep.NONE }
             // STEP 2: STANDARD BATTERY (Whitelist)
             isBatteryNeeded -> {
                 val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
@@ -114,6 +116,7 @@ fun OnboardingScreen(
     val notificationLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = {
+            notifAttempted = true  // BUG-06: advance waterfall regardless of granted/denied
             onCheckPermissions()
             if (hasStartedSetup) {
                 scope.launch {

@@ -53,7 +53,8 @@ class OverlayController(
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                y = OverlayConfig.TOAST_Y_OFFSET
+                // BUG-07: convert dp → px so position is correct on all screen densities
+                y = (OverlayConfig.TOAST_Y_OFFSET_DP * context.resources.displayMetrics.density).toInt()
             }
 
             try {
@@ -74,6 +75,8 @@ class OverlayController(
 
         scope.launch(Dispatchers.Main) {
             timerView = TextView(context).apply {
+                // BUG-14: show "BG" label on first line so users know what this overlay is
+                text = "BG\n--:--"
                 setTextColor(AndroidColor.WHITE)
                 textSize = OverlayConfig.TIMER_TEXT_SIZE
                 setPadding(OverlayConfig.TIMER_PADDING_HORIZONTAL, OverlayConfig.TIMER_PADDING_VERTICAL,
@@ -95,8 +98,10 @@ class OverlayController(
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.END
-                x = OverlayConfig.TIMER_POS_X
-                y = OverlayConfig.TIMER_POS_Y
+                // BUG-07: convert dp → px
+                val density = context.resources.displayMetrics.density
+                x = (OverlayConfig.TIMER_POS_X_DP * density).toInt()
+                y = (OverlayConfig.TIMER_POS_Y_DP * density).toInt()
             }
 
             try {
@@ -123,7 +128,8 @@ class OverlayController(
 
                 val secondsLeft = ((expirationMs - now) / 1000).toInt()
                 timerView?.apply {
-                    text = String.format("%02d:%02d", secondsLeft / 60, secondsLeft % 60)
+                    // BUG-14: prefix with "BG" label so the bubble is identifiable
+                    text = "BG\n${String.format("%02d:%02d", secondsLeft / 60, secondsLeft % 60)}"
                     (background as? GradientDrawable)?.setColor(
                         if (secondsLeft <= 30) AndroidColor.parseColor(OverlayConfig.TIMER_BG_WARNING)
                         else AndroidColor.parseColor(OverlayConfig.TIMER_BG_NORMAL)

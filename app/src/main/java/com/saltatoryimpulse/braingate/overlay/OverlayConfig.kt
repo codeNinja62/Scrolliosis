@@ -8,7 +8,8 @@ object OverlayConfig {
     const val TOAST_PADDING_VERTICAL = 32
     const val TOAST_BG_HEX = "#333333"
     const val TOAST_CORNER_RADIUS = 60f
-    const val TOAST_Y_OFFSET = 250
+    // BUG-07: was raw px (250) — now in dp so it scales correctly on all screen densities
+    const val TOAST_Y_OFFSET_DP = 100
 
     // Timer styling
     const val TIMER_PADDING_HORIZONTAL = 35
@@ -17,8 +18,9 @@ object OverlayConfig {
     const val TIMER_BG_NORMAL = "#CC0F1115"
     const val TIMER_BG_WARNING = "#CCEF4444"
     const val TIMER_CORNER_RADIUS = 50f
-    const val TIMER_POS_X = 50
-    const val TIMER_POS_Y = 150
+    // BUG-07: was raw px (50, 150) — now in dp
+    const val TIMER_POS_X_DP = 16
+    const val TIMER_POS_Y_DP = 60
 
     // Timing: use project-wide constants where possible
     val TOAST_DURATION_MS: Long get() = Constants.TOAST_DURATION_MS
