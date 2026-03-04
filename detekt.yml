@@ -1,0 +1,15 @@
+# Minimal detekt configuration (opt-in, non-invasive)
+build:
+  maxIssues: 0
+
+processors:
+  active: true
+
+config:
+  validation: true
+
+comments:
+  active: true
+
+style:
+  active: true

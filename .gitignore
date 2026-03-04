@@ -1,0 +1,35 @@
+*.iml
+.gradle
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+hs_err_pid*.log
+replay_pid*.log
+
+# Keystores and signing keys — never commit secrets
+/signing
+*.jks
+*.keystore
+*.p12
+*.pfx
+key/
+
+# Kotlin compiler error cache
+.kotlin/
+
+# Android Studio / IntelliJ IDE state (local-only)
+/.idea/studiobot.xml
+/.idea/deploymentTargetSelector.xml
+
+# Build outputs
+/app/release
+/app/build/outputs/

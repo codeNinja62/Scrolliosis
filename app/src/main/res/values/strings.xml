@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">BrainGate</string>
+    <string name="accessibility_description">BrainGate uses this to detect when you open distracting apps and enforce your mindful reflection gates.</string>
+</resources>
