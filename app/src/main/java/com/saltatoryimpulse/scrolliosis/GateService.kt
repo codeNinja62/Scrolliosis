@@ -144,25 +144,24 @@ class GateService : AccessibilityService(), KoinComponent {
             return false
         }
 
+        if (PermissionUtils.isSetupGraceActive(this)) {
+            return false
+        }
+
         if (pkg.contains("packageinstaller") || pkg.contains("permissioncontroller")) {
             return true
         }
 
-        if (pkg.contains("settings") || pkg.contains("securitycenter") || pkg.contains("safecenter") ||
-            pkg.contains("systemmanager") || pkg.contains("seccontainer")) {
-            return true
-        }
-
+        val appPackageName = packageName()
         val fastText = event.text.toString().lowercase()
         val targetsScrolliosis = fastText.contains("scrolliosis") ||
-            fastText.contains(packageName.lowercase()) ||
-            fastText.contains(packageName())
+            fastText.contains(appPackageName.lowercase())
 
         if (targetsScrolliosis) return true
 
         val rootNode = rootInActiveWindow ?: return false
         return try {
-            scanNodeForAnyText(rootNode, listOf("scrolliosis", packageName(), packageName.lowercase()))
+            scanNodeForAnyText(rootNode, listOf("scrolliosis", appPackageName.lowercase()))
         } catch (e: Exception) {
             Log.w(Constants.TAG, "Error scanning accessibility node tree", e)
             false

@@ -77,6 +77,7 @@ fun OnboardingScreen(
             try {
                 installedAppCatalog.primeInstalledApps()
             } finally {
+                PermissionUtils.clearSetupGrace(context)
                 isPrimingInstalledApps = false
                 hasStartedSetup = false
                 onCheckPermissions()
@@ -106,6 +107,7 @@ fun OnboardingScreen(
             isNotifsNeeded && !notifAttempted -> { currentDialog = SetupStep.NONE }
             // STEP 2: STANDARD BATTERY (Whitelist)
             isBatteryNeeded -> {
+                PermissionUtils.extendSetupGrace(context)
                 val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                     data = Uri.parse("package:${context.packageName}")
                 }
@@ -119,6 +121,7 @@ fun OnboardingScreen(
             // STEP 3: USAGE ACCESS (Fallback foreground detection)
             isUsageAccessNeeded -> {
                 try {
+                    PermissionUtils.extendSetupGrace(context)
                     context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
                 } catch (e: Exception) {
                     currentDialog = SetupStep.NONE
@@ -243,6 +246,7 @@ fun OnboardingScreen(
             confirmText = "GRANT AUTHORITY",
             onConfirm = {
                 currentDialog = SetupStep.NONE
+                PermissionUtils.extendSetupGrace(context)
                 context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
             },
             onDismiss = {
@@ -259,6 +263,7 @@ fun OnboardingScreen(
             confirmText = "OPEN SETTINGS",
             onConfirm = {
                 currentDialog = SetupStep.NONE
+                PermissionUtils.extendSetupGrace(context)
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             },
             onDismiss = {
@@ -276,6 +281,7 @@ fun OnboardingScreen(
             onConfirm = {
                 currentDialog = SetupStep.NONE
                 manufacturerStepAttempted = true
+                PermissionUtils.extendSetupGrace(context)
                 ManufacturerUtils.openPowerManagementSettings(context)
             },
             onDismiss = {

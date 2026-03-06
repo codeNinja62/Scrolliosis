@@ -18,6 +18,8 @@ import androidx.core.content.ContextCompat
  * Engineered for 100% accuracy across AOSP and OEM-modified Android skins.
  */
 object PermissionUtils {
+    private const val PREFS_NAME = "scrolliosis_runtime"
+    private const val KEY_SETUP_GRACE_UNTIL = "setup_grace_until"
 
     /**
      * ACCESSIBILITY HEALTH CHECK:
@@ -111,6 +113,28 @@ object PermissionUtils {
         }
 
         return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    fun extendSetupGrace(context: Context, durationMs: Long = Constants.SETUP_GRACE_DURATION_MS) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val currentValue = prefs.getLong(KEY_SETUP_GRACE_UNTIL, 0L)
+        val extendedUntil = maxOf(currentValue, System.currentTimeMillis() + durationMs)
+        prefs.edit().putLong(KEY_SETUP_GRACE_UNTIL, extendedUntil).apply()
+    }
+
+    fun clearSetupGrace(context: Context) {
+        context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_SETUP_GRACE_UNTIL)
+            .apply()
+    }
+
+    fun isSetupGraceActive(context: Context): Boolean {
+        val graceUntil = context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getLong(KEY_SETUP_GRACE_UNTIL, 0L)
+        return graceUntil > System.currentTimeMillis()
     }
 
     /**

@@ -14,6 +14,7 @@ object Constants {
 
     const val UNLOCK_DURATION_MS = 5 * 60 * 1000L
     const val SERVICE_START_GRACE_MS = 8_000L
+    const val SETUP_GRACE_DURATION_MS = 3 * 60 * 1000L
     const val FOREGROUND_POLL_INTERVAL_MS = 150L
     const val BLOCK_INTERCEPT_DEBOUNCE_MS = 350L
     const val SERVICE_REVIVE_DELAY_MS = 1_000L

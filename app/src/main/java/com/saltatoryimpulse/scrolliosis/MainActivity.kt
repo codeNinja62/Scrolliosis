@@ -30,6 +30,14 @@ class MainActivity : ComponentActivity(), KoinComponent {
     // PERSISTENT ENFORCEMENT STATE: Isolated from the NavHost backstack
     private var isSystemLocked = mutableStateOf(false)
 
+    private fun requiresOnboarding(): Boolean {
+        val hasAccessibility = PermissionUtils.isAccessibilityServiceEnabled(this)
+        val hasOverlay = PermissionUtils.canDrawOverlays(this)
+        val hasNotifications = PermissionUtils.hasNotificationPermission(this)
+        val hasUsageAccess = PermissionUtils.hasUsageAccess(this)
+        return !hasAccessibility || !hasOverlay || !hasNotifications || !hasUsageAccess
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -49,11 +57,7 @@ class MainActivity : ComponentActivity(), KoinComponent {
                 navController = currentNavController
 
                 // Check required permissions (accessibility, overlay, notifications, usage access)
-                val hasAccessibility = PermissionUtils.isAccessibilityServiceEnabled(this)
-                val hasOverlay = PermissionUtils.canDrawOverlays(this)
-                val hasNotifications = PermissionUtils.hasNotificationPermission(this)
-                val hasUsageAccess = PermissionUtils.hasUsageAccess(this)
-                val needsOnboarding = !hasAccessibility || !hasOverlay || !hasNotifications || !hasUsageAccess
+                val needsOnboarding = requiresOnboarding()
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -94,9 +98,8 @@ class MainActivity : ComponentActivity(), KoinComponent {
                                     needsNotifications = !PermissionUtils.hasNotificationPermission(this@MainActivity),
                                     needsUsageAccess = !PermissionUtils.hasUsageAccess(this@MainActivity),
                                     onCheckPermissions = {
-                                        if (PermissionUtils.isAccessibilityServiceEnabled(this@MainActivity) &&
-                                            PermissionUtils.canDrawOverlays(this@MainActivity) &&
-                                            PermissionUtils.hasUsageAccess(this@MainActivity)) {
+                                        if (!requiresOnboarding()) {
+                                            PermissionUtils.clearSetupGrace(this@MainActivity)
                                             currentNavController.navigate("home") {
                                                 popUpTo("onboarding") { inclusive = true }
                                             }
@@ -143,6 +146,9 @@ class MainActivity : ComponentActivity(), KoinComponent {
     override fun onResume() {
         super.onResume()
         overlayController.removeBlockingShield()
+        if (!requiresOnboarding()) {
+            PermissionUtils.clearSetupGrace(this)
+        }
         lifecycleScope.launch {
             installedAppCatalog.refreshCatalog()
         }
@@ -192,10 +198,7 @@ class MainActivity : ComponentActivity(), KoinComponent {
         setIntent(intent)
         overlayController.removeBlockingShield()
 
-        val hasAccessibility = PermissionUtils.isAccessibilityServiceEnabled(this)
-        val hasOverlay = PermissionUtils.canDrawOverlays(this)
-        val hasUsageAccess = PermissionUtils.hasUsageAccess(this)
-        val needsOnboarding = !hasAccessibility || !hasOverlay || !hasUsageAccess
+        val needsOnboarding = requiresOnboarding()
 
         handleRouting(intent, navController, needsOnboarding)
     }
