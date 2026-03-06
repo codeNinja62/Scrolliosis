@@ -42,6 +42,7 @@ fun OnboardingScreen(
     needsAccessibility: Boolean,
     needsOverlay: Boolean,
     needsNotifications: Boolean,
+    needsUsageAccess: Boolean,
     onCheckPermissions: () -> Unit
 ) {
     val context = LocalContext.current
@@ -62,9 +63,11 @@ fun OnboardingScreen(
 
     val batteryNeeded = !powerManager.isIgnoringBatteryOptimizations(context.packageName)
     val notifsNeeded = needsNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    val usageAccessNeeded = needsUsageAccess
     val oemNeeded = ManufacturerUtils.isAggressiveManufacturer() && !manufacturerStepAttempted
 
-    val allGranted = !needsAccessibility && !needsOverlay && !batteryNeeded && !notifsNeeded && !oemNeeded
+    val allGranted = !needsAccessibility && !needsOverlay && !batteryNeeded && !notifsNeeded &&
+        !usageAccessNeeded && !oemNeeded
 
     fun finalizeSetup() {
         if (isPrimingInstalledApps) return
@@ -94,6 +97,7 @@ fun OnboardingScreen(
         val isNotifsNeeded = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         val isBatteryNeeded = !powerManager.isIgnoringBatteryOptimizations(context.packageName)
+        val isUsageAccessNeeded = !PermissionUtils.hasUsageAccess(context)
         val isOverlayNeeded = !Settings.canDrawOverlays(context)
         val isAccessNeeded = !PermissionUtils.isAccessibilityServiceEnabled(context)
 
@@ -112,13 +116,22 @@ fun OnboardingScreen(
                 }
             }
 
-            // STEP 3: OVERLAY (The Visual Hook)
+            // STEP 3: USAGE ACCESS (Fallback foreground detection)
+            isUsageAccessNeeded -> {
+                try {
+                    context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                } catch (e: Exception) {
+                    currentDialog = SetupStep.NONE
+                }
+            }
+
+            // STEP 4: OVERLAY (The Visual Hook)
             isOverlayNeeded -> currentDialog = SetupStep.OVERLAY
 
-            // STEP 4: ACCESSIBILITY (The Core Engine)
+            // STEP 5: ACCESSIBILITY (The Core Engine)
             isAccessNeeded -> currentDialog = SetupStep.ACCESSIBILITY
 
-            // STEP 5: OEM HARDENING (Auto-Start / No Restrictions)
+            // STEP 6: OEM HARDENING (Auto-Start / No Restrictions)
             // This only triggers for Samsung, Xiaomi, etc., to seal the persistence chain.
             ManufacturerUtils.isAggressiveManufacturer() && !manufacturerStepAttempted -> {
                 currentDialog = SetupStep.MANUFACTURER
@@ -184,7 +197,7 @@ fun OnboardingScreen(
 
         Text(
             text = if (allGranted) "Alignment confirmed. Activating Gate..."
-            else "Scrolliosis requires deep system synchronization to prevent neural bypass during focus sessions.",
+            else "Scrolliosis requires deep system synchronization, usage telemetry, and overlay control to prevent neural bypass during focus sessions.",
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
             color = TextMediumEmphasis

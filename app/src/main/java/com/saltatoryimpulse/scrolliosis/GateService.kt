@@ -1,24 +1,20 @@
 package com.saltatoryimpulse.scrolliosis
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.PixelFormat
-import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
-import android.view.View
-import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import android.util.Log
 import kotlinx.coroutines.*
 import com.saltatoryimpulse.scrolliosis.overlay.OverlayController
 import java.util.concurrent.ConcurrentHashMap
-import android.graphics.Color as AndroidColor
 
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -35,6 +31,8 @@ class GateService : AccessibilityService(), KoinComponent {
 
     // Grace period after service start to avoid blocking during onboarding/permission grant
     private var serviceStartTime = 0L
+    private var lastForegroundPackage: String? = null
+    private var usageStatsMonitorJob: Job? = null
 
     private val unlockedApps = ConcurrentHashMap<String, Long>()
     private var currentForegroundPackage: String? = null
@@ -72,6 +70,8 @@ class GateService : AccessibilityService(), KoinComponent {
         // repository and overlayController are provided by Koin injection
         // (OverlayController is created as a singleton in the Koin module using the application context).
         serviceStartTime = System.currentTimeMillis()
+        overlayController.prepareBlockingShield()
+        startUsageStatsMonitor()
 
         val filter = IntentFilter().apply {
             addAction(Constants.ACTION_UNLOCK)
@@ -92,38 +92,50 @@ class GateService : AccessibilityService(), KoinComponent {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Strict focus on WINDOW_STATE_CHANGED to maximize performance and battery
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val packageName = event.packageName?.toString() ?: return
-            currentForegroundPackage = packageName
+        val eventType = event?.eventType ?: return
+        val isForegroundSignal = eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+            eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+            eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED
 
-            // Detect settings/uninstall attempts across OEMs and handle interception.
-            if (isUninstallOrSettingsAttempt(packageName, event)) {
-                handleSettingsInterception()
-                return
-            }
+        if (!isForegroundSignal) return
 
-            val now = System.currentTimeMillis()
-            unlockedApps.entries.removeIf { it.value < now }
+        val packageName = event.packageName?.toString() ?: return
+        handleForegroundPackage(packageName, event)
+    }
 
-            // Logic gate ensures visibility state remains accurate
-            if (unlockedApps.containsKey(packageName)) {
-                updateTimerVisibility()
-            } else {
-                removeFloatingTimer() // Proactive unmount
-                checkBlockingLogic(packageName)
-            }
+    private fun handleForegroundPackage(packageName: String, event: AccessibilityEvent? = null) {
+        currentForegroundPackage = packageName
+        lastForegroundPackage = packageName
+
+        if (packageName == packageName()) {
+            overlayController.removeBlockingShield()
+        }
+
+        if (event != null && isProtectedSettingsAttempt(packageName, event)) {
+            handleSettingsInterception()
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        unlockedApps.entries.removeIf { it.value < now }
+
+        if (unlockedApps.containsKey(packageName)) {
+            updateTimerVisibility()
+        } else {
+            removeFloatingTimer()
+            checkBlockingLogic(packageName)
         }
     }
 
-    private fun isUninstallOrSettingsAttempt(packageName: String, event: AccessibilityEvent): Boolean {
+    private fun isProtectedSettingsAttempt(packageName: String, event: AccessibilityEvent): Boolean {
         val pkg = packageName.lowercase()
         val isSystemApp = pkg.contains("settings") ||
                 pkg.contains("packageinstaller") ||
                 pkg.contains("securitycenter") || // Xiaomi
                 pkg.contains("safecenter") ||     // Oppo
                 pkg.contains("systemmanager") ||  // Huawei
-                pkg.contains("seccontainer")      // Vivo
+                pkg.contains("seccontainer") ||   // Vivo
+                pkg.contains("permissioncontroller")
 
         if (!isSystemApp) return false
 
@@ -132,22 +144,25 @@ class GateService : AccessibilityService(), KoinComponent {
             return false
         }
 
-        // BUG-10: only intercept if the screen mentions BOTH "scrolliosis" AND "uninstall".
-        // Previously, any Settings page that showed the app name (e.g. App Info, Permissions)
-        // triggered a 120-second lockout. Now we require clear uninstall intent.
+        if (pkg.contains("packageinstaller") || pkg.contains("permissioncontroller")) {
+            return true
+        }
+
+        if (pkg.contains("settings") || pkg.contains("securitycenter") || pkg.contains("safecenter") ||
+            pkg.contains("systemmanager") || pkg.contains("seccontainer")) {
+            return true
+        }
+
         val fastText = event.text.toString().lowercase()
-        val hasScrolliosis = fastText.contains("scrolliosis")
-        val hasUninstall = fastText.contains("uninstall")
+        val targetsScrolliosis = fastText.contains("scrolliosis") ||
+            fastText.contains(packageName.lowercase()) ||
+            fastText.contains(packageName())
 
-        // Package installer is always an explicit uninstall flow
-        if (pkg.contains("packageinstaller") && hasScrolliosis) return true
-        // For other system settings, require BOTH keywords to avoid false positives
-        if (hasScrolliosis && hasUninstall) return true
+        if (targetsScrolliosis) return true
 
-        // If not found in the quick scan, do a deep node scan for both keywords together.
         val rootNode = rootInActiveWindow ?: return false
         return try {
-            scanNodeForText(rootNode, "scrolliosis") && scanNodeForText(rootNode, "uninstall")
+            scanNodeForAnyText(rootNode, listOf("scrolliosis", packageName(), packageName.lowercase()))
         } catch (e: Exception) {
             Log.w(Constants.TAG, "Error scanning accessibility node tree", e)
             false
@@ -156,21 +171,21 @@ class GateService : AccessibilityService(), KoinComponent {
         }
     }
 
-    private fun scanNodeForText(node: AccessibilityNodeInfo?, targetText: String): Boolean {
+    private fun packageName(): String = applicationContext.packageName
+
+    private fun scanNodeForAnyText(node: AccessibilityNodeInfo?, targetTexts: List<String>): Boolean {
         if (node == null) return false
 
-        // Standard stable API calls for cross-OEM compatibility
         val text = node.text?.toString()?.lowercase() ?: ""
         val desc = node.contentDescription?.toString()?.lowercase() ?: ""
-
-        if (text.contains(targetText) || desc.contains(targetText)) {
+        if (targetTexts.any { target -> text.contains(target) || desc.contains(target) }) {
             return true
         }
 
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             try {
-                val found = scanNodeForText(child, targetText)
+                val found = scanNodeForAnyText(child, targetTexts)
                 if (found) return true
             } finally {
                 safeReleaseNode(child)
@@ -207,8 +222,7 @@ class GateService : AccessibilityService(), KoinComponent {
             silentKill()
             showCustomToast("System modifications restricted during active focus.")
         } else {
-            // Trigger hard block and navigate to the system purge screen.
-            triggerHardBlock("com.android.settings", "system_purge_screen")
+            triggerHardBlock(packageName(), "system_purge_screen")
         }
     }
 
@@ -218,12 +232,13 @@ class GateService : AccessibilityService(), KoinComponent {
                 withContext(Dispatchers.Main) {
                     val now = System.currentTimeMillis()
                     if (now < cooldownEndTime) {
+                        overlayController.showBlockingShield()
                         silentKill()
                                     if (now - lastToastTime > Constants.COOLDOWN_TOAST_INTERVAL_MS) {
                                         lastToastTime = now
                                         showCustomToast("Gate locked. Cooldown active.")
                                     }
-                    } else if (now - lastInterceptTime > 2000) {
+                    } else if (now - lastInterceptTime > Constants.BLOCK_INTERCEPT_DEBOUNCE_MS) {
                         lastInterceptTime = now
                         triggerHardBlock(packageName)
                     }
@@ -233,6 +248,9 @@ class GateService : AccessibilityService(), KoinComponent {
     }
 
     private fun triggerHardBlock(packageName: String, targetRoute: String = "gatekeeper_screen") {
+        overlayController.showBlockingShield()
+        runCatching { performGlobalAction(GLOBAL_ACTION_HOME) }
+
         val homeIntent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -248,10 +266,30 @@ class GateService : AccessibilityService(), KoinComponent {
     }
 
     private fun silentKill() {
+        overlayController.showBlockingShield()
+        runCatching { performGlobalAction(GLOBAL_ACTION_HOME) }
         startActivity(Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         })
+    }
+
+    private fun startUsageStatsMonitor() {
+        usageStatsMonitorJob?.cancel()
+        usageStatsMonitorJob = serviceScope.launch {
+            while (isActive) {
+                if (PermissionUtils.hasUsageAccess(this@GateService)) {
+                    val foregroundPackage = PermissionUtils.getForegroundPackageFromUsageStats(this@GateService)
+                    if (!foregroundPackage.isNullOrBlank() && foregroundPackage != lastForegroundPackage) {
+                        withContext(Dispatchers.Main) {
+                            handleForegroundPackage(foregroundPackage)
+                        }
+                    }
+                }
+
+                delay(Constants.FOREGROUND_POLL_INTERVAL_MS)
+            }
+        }
     }
 
     private fun updateTimerVisibility() {
@@ -281,9 +319,12 @@ class GateService : AccessibilityService(), KoinComponent {
     override fun onDestroy() {
         super.onDestroy()
         removeFloatingTimer()
+        overlayController.removeBlockingShield()
+        usageStatsMonitorJob?.cancel()
         try { overlayController.release() } catch (e: Exception) { /* ignore */ }
         serviceScope.cancel()
         try { unregisterReceiver(communicationReceiver) } catch (e: Exception) { Log.w(Constants.TAG, "Failed to unregister receiver", e) }
+        scheduleServiceRevive()
     }
 
     private fun createNotificationChannel() {
@@ -314,6 +355,11 @@ class GateService : AccessibilityService(), KoinComponent {
         return START_STICKY
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        scheduleServiceRevive()
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
 
@@ -321,11 +367,30 @@ class GateService : AccessibilityService(), KoinComponent {
         val info = serviceInfo ?: return
 
         // Request flags to allow window scanning and include non-important views.
+        info.eventTypes = info.eventTypes or
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED
         info.flags = info.flags or
-            android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-            android.accessibilityservice.AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+            AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
 
         // Apply updated service info.
         this.serviceInfo = info
+    }
+
+    private fun scheduleServiceRevive() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val reviveIntent = Intent(this, BootReceiver::class.java).apply {
+            action = Constants.ACTION_ENSURE_SERVICE
+            `package` = packageName()
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            this,
+            404,
+            reviveIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val triggerAt = System.currentTimeMillis() + Constants.SERVICE_REVIVE_DELAY_MS
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
     }
 }

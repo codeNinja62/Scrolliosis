@@ -23,11 +23,74 @@ class OverlayController(
     private val windowManager: WindowManager,
     private val scope: CoroutineScope
 ) {
+    private var blockingShieldView: View? = null
+    private var blockingShieldAttached = false
     private var customToastView: View? = null
     private var toastJob: Job? = null
 
     private var timerView: TextView? = null
     private var timerJob: Job? = null
+
+    fun prepareBlockingShield() {
+        scope.launch(Dispatchers.Main) {
+            ensureBlockingShieldAttached()
+            blockingShieldView?.visibility = View.INVISIBLE
+            blockingShieldView?.alpha = 0f
+        }
+    }
+
+    fun showBlockingShield() {
+        scope.launch(Dispatchers.Main) {
+            ensureBlockingShieldAttached()
+            blockingShieldView?.visibility = View.VISIBLE
+            blockingShieldView?.alpha = 1f
+        }
+    }
+
+    fun removeBlockingShield() {
+        blockingShieldView?.visibility = View.INVISIBLE
+        blockingShieldView?.alpha = 0f
+    }
+
+    private fun ensureBlockingShieldAttached() {
+        if (blockingShieldAttached && blockingShieldView != null) return
+
+        val shieldView = blockingShieldView ?: View(context).apply {
+            setBackgroundColor(AndroidColor.parseColor(OverlayConfig.SHIELD_BG_HEX))
+            alpha = 0f
+            visibility = View.INVISIBLE
+        }
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+        }
+
+        try {
+            windowManager.addView(shieldView, params)
+            blockingShieldView = shieldView
+            blockingShieldAttached = true
+        } catch (e: Exception) {
+            blockingShieldView = null
+            blockingShieldAttached = false
+            Log.w("OverlayController", "Failed to attach blocking shield", e)
+        }
+    }
+
+    private fun destroyBlockingShield() {
+        blockingShieldView?.let {
+            try { windowManager.removeView(it) } catch (e: Exception) {}
+        }
+        blockingShieldView = null
+        blockingShieldAttached = false
+    }
 
     fun showCustomToast(message: String) {
         scope.launch(Dispatchers.Main) {
@@ -158,6 +221,7 @@ class OverlayController(
     fun release() {
         toastJob?.cancel()
         timerJob?.cancel()
+        destroyBlockingShield()
         removeCustomToast()
         removeTimer()
     }

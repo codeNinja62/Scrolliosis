@@ -1,5 +1,6 @@
 package com.saltatoryimpulse.scrolliosis
 
+import android.os.Build
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -17,6 +18,9 @@ class BootReceiver : BroadcastReceiver() {
         // Comprehensive list of boot actions including OEM-specific fast-boot signals
         val isBoot = action == Intent.ACTION_BOOT_COMPLETED ||
                 action == Intent.ACTION_LOCKED_BOOT_COMPLETED || // Critical for encrypted devices
+            action == Intent.ACTION_MY_PACKAGE_REPLACED ||
+            action == Intent.ACTION_USER_UNLOCKED ||
+            action == Constants.ACTION_ENSURE_SERVICE ||
                 action == "android.intent.action.QUICKBOOT_POWERON" || // HTC/Older OEM
                 action == "com.htc.intent.action.QUICKBOOT_POWERON"
 
@@ -30,10 +34,11 @@ class BootReceiver : BroadcastReceiver() {
             // preventing the 'forgetfulness' that occurs when the OS skips 'cold' services.
             try {
                 val serviceIntent = Intent(context, GateService::class.java)
-                // On Android 8.0+, we use startForegroundService if we need it to run immediately,
-                // but for a simple process wake-up ping, a standard startService (or even the intent itself)
-                // is often enough to force the Accessibility Manager to re-bind the service.
-                context.startService(serviceIntent)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    context.startService(serviceIntent)
+                }
             } catch (e: Exception) {
                 // On some API 26+ devices, startService may throw an IllegalStateException
                 // if the app is in the background. We catch it here because the intent

@@ -3,6 +3,8 @@ package com.saltatoryimpulse.scrolliosis.overlay
 import com.saltatoryimpulse.scrolliosis.Constants
 
 object OverlayConfig {
+    const val SHIELD_BG_HEX = "#FF000000"
+
     // Toast styling
     const val TOAST_PADDING_HORIZONTAL = 56
     const val TOAST_PADDING_VERTICAL = 32

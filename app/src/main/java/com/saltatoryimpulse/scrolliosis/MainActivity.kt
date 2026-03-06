@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
 import com.saltatoryimpulse.scrolliosis.data.InstalledAppCatalog
+import com.saltatoryimpulse.scrolliosis.overlay.OverlayController
 import com.saltatoryimpulse.scrolliosis.ui.screens.*
 import com.saltatoryimpulse.scrolliosis.ui.theme.ScrolliosisTheme
 import kotlinx.coroutines.launch
@@ -21,6 +22,7 @@ import org.koin.core.component.inject
 class MainActivity : ComponentActivity(), KoinComponent {
 
     private val installedAppCatalog: InstalledAppCatalog by inject()
+    private val overlayController: OverlayController by inject()
 
     private var blockedPackage = mutableStateOf("")
     private var navController: NavHostController? = null
@@ -46,11 +48,12 @@ class MainActivity : ComponentActivity(), KoinComponent {
                 val currentNavController = rememberNavController()
                 navController = currentNavController
 
-                // Check required permissions (accessibility, overlay, notifications)
+                // Check required permissions (accessibility, overlay, notifications, usage access)
                 val hasAccessibility = PermissionUtils.isAccessibilityServiceEnabled(this)
                 val hasOverlay = PermissionUtils.canDrawOverlays(this)
                 val hasNotifications = PermissionUtils.hasNotificationPermission(this)
-                val needsOnboarding = !hasAccessibility || !hasOverlay || !hasNotifications
+                val hasUsageAccess = PermissionUtils.hasUsageAccess(this)
+                val needsOnboarding = !hasAccessibility || !hasOverlay || !hasNotifications || !hasUsageAccess
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -89,9 +92,11 @@ class MainActivity : ComponentActivity(), KoinComponent {
                                     needsAccessibility = !PermissionUtils.isAccessibilityServiceEnabled(this@MainActivity),
                                     needsOverlay = !PermissionUtils.canDrawOverlays(this@MainActivity),
                                     needsNotifications = !PermissionUtils.hasNotificationPermission(this@MainActivity),
+                                    needsUsageAccess = !PermissionUtils.hasUsageAccess(this@MainActivity),
                                     onCheckPermissions = {
                                         if (PermissionUtils.isAccessibilityServiceEnabled(this@MainActivity) &&
-                                            PermissionUtils.canDrawOverlays(this@MainActivity)) {
+                                            PermissionUtils.canDrawOverlays(this@MainActivity) &&
+                                            PermissionUtils.hasUsageAccess(this@MainActivity)) {
                                             currentNavController.navigate("home") {
                                                 popUpTo("onboarding") { inclusive = true }
                                             }
@@ -129,10 +134,15 @@ class MainActivity : ComponentActivity(), KoinComponent {
                 }
             }
         }
+
+        window.decorView.post {
+            overlayController.removeBlockingShield()
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        overlayController.removeBlockingShield()
         lifecycleScope.launch {
             installedAppCatalog.refreshCatalog()
         }
@@ -180,10 +190,12 @@ class MainActivity : ComponentActivity(), KoinComponent {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        overlayController.removeBlockingShield()
 
         val hasAccessibility = PermissionUtils.isAccessibilityServiceEnabled(this)
         val hasOverlay = PermissionUtils.canDrawOverlays(this)
-        val needsOnboarding = !hasAccessibility || !hasOverlay
+        val hasUsageAccess = PermissionUtils.hasUsageAccess(this)
+        val needsOnboarding = !hasAccessibility || !hasOverlay || !hasUsageAccess
 
         handleRouting(intent, navController, needsOnboarding)
     }

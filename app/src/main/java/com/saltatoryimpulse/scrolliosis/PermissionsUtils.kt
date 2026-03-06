@@ -1,12 +1,16 @@
 package com.saltatoryimpulse.scrolliosis
 
 import android.Manifest
+import android.app.AppOpsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Process
 import android.provider.Settings
 import android.text.TextUtils
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import androidx.core.content.ContextCompat
 
 /**
@@ -82,5 +86,74 @@ object PermissionUtils {
         } else {
             true
         }
+    }
+
+    /**
+     * USAGE ACCESS CHECK:
+     * Gives us a second foreground-app signal when accessibility callbacks are delayed,
+     * suppressed by OEMs, or lost during fast app transitions.
+     */
+    fun hasUsageAccess(context: Context): Boolean {
+        val appOpsManager = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOpsManager.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                context.packageName
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            appOpsManager.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                context.packageName
+            )
+        }
+
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    /**
+     * Returns the most recent foreground package we can infer from UsageStats.
+     * This acts as a fallback path when Accessibility events are delayed or skipped.
+     */
+    fun getForegroundPackageFromUsageStats(
+        context: Context,
+        lookBackWindowMs: Long = 15_000L
+    ): String? {
+        if (!hasUsageAccess(context)) return null
+
+        val usageStatsManager =
+            context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val endTime = System.currentTimeMillis()
+        val startTime = endTime - lookBackWindowMs
+
+        @Suppress("DEPRECATION")
+        val eventPackage = runCatching {
+            val usageEvents = usageStatsManager.queryEvents(startTime, endTime)
+            val event = UsageEvents.Event()
+            var packageName: String? = null
+
+            while (usageEvents.hasNextEvent()) {
+                usageEvents.getNextEvent(event)
+                val isForegroundEvent = event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                        event.eventType == UsageEvents.Event.ACTIVITY_RESUMED)
+                if (isForegroundEvent && !event.packageName.isNullOrBlank()) {
+                    packageName = event.packageName
+                }
+            }
+
+            packageName
+        }.getOrNull()
+
+        if (!eventPackage.isNullOrBlank()) {
+            return eventPackage
+        }
+
+        return usageStatsManager
+            .queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime)
+            .maxByOrNull { it.lastTimeUsed }
+            ?.packageName
     }
 }

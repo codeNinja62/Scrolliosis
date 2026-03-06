@@ -45,6 +45,8 @@ class OverlayControllerTest {
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val controller = OverlayController(context, wm, testScope)
 
+        controller.prepareBlockingShield()
+        controller.showBlockingShield()
         // Show a toast and ensure controller created
         controller.showCustomToast("hello")
         // mount a short timer (expiration in near future)
