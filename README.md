@@ -1,6 +1,6 @@
-# BrainGate
+# Scrolliosis
 
-BrainGate is an open-source Android app that helps you reclaim focus by blocking distracting apps behind a knowledge gate. Instead of scrolling mindlessly, you must answer a question from your personal Knowledge Vault before any blocked app is allowed to open — for a limited time window only.
+Scrolliosis is an open-source Android app that helps you reclaim focus by blocking distracting apps behind a knowledge gate. Instead of scrolling mindlessly, you must answer a question from your personal Knowledge Vault before any blocked app is allowed to open - for a limited time window only.
 
 ---
 
@@ -31,7 +31,7 @@ BrainGate is an open-source Android app that helps you reclaim focus by blocking
 ## Architecture
 
 ```
-app/src/main/java/com/saltatoryimpulse/braingate/
+app/src/main/java/com/saltatoryimpulse/scrolliosis/
 ├── data/                   # Repository pattern (IKnowledgeRepository / KnowledgeRepository)
 ├── di/                     # Koin dependency injection module
 ├── overlay/                # Overlay controller & config
@@ -39,9 +39,9 @@ app/src/main/java/com/saltatoryimpulse/braingate/
 │   ├── components/         # Reusable Compose components
 │   ├── screens/            # HomeScreen, GateKeeperScreen, KnowledgeVaultScreen,
 │   │                       # AppSelectionScreen, OnboardingScreen, SystemPurgeScreen
-│   └── theme/              # BrainGateTheme, colour tokens
+│   └── theme/              # ScrolliosisTheme, colour tokens
 ├── AppViewModel.kt         # Shared ViewModel
-├── BrainGateApplication.kt # Koin initialisation
+├── ScrolliosisApplication.kt # Koin initialisation
 ├── BootReceiver.kt         # Restart service on boot
 ├── Constants.kt            # App-wide constants
 ├── GateService.kt          # Accessibility service — core blocking logic
@@ -65,8 +65,8 @@ app/src/main/java/com/saltatoryimpulse/braingate/
 ### Clone and build
 
 ```bash
-git clone https://github.com/<your-username>/BrainGate.git
-cd BrainGate
+git clone https://github.com/<your-username>/Scrolliosis.git
+cd Scrolliosis
 ./gradlew :app:assembleDebug          # Linux / macOS
 gradlew.bat :app:assembleDebug        # Windows
 ```

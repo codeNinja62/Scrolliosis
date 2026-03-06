@@ -4,7 +4,7 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
     <!--
-        BrainGate notification icon — monochrome brain outline.
+        Scrolliosis notification icon — monochrome brain outline.
         Status-bar icons must be pure white on transparent; the system tints them.
     -->
     <path

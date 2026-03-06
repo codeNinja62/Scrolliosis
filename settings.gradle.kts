@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "BrainGate"
+rootProject.name = "Scrolliosis"
 include(":app")

@@ -20,11 +20,11 @@ fun signingProp(name: String): String? {
 }
 
 android {
-    namespace = "com.saltatoryimpulse.braingate"
+    namespace = "com.saltatoryimpulse.scrolliosis"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.saltatoryimpulse.braingate"
+        applicationId = "com.saltatoryimpulse.scrolliosis"
         minSdk = 26 // Supports 95%+ of Android devices
         targetSdk = 35
         versionCode = 1

@@ -1,19 +1,19 @@
 # =========================================================
-# BRAINGATE MASTER: HARDENED & FUNCTIONAL (FINAL)
+# SCROLLIOSIS MASTER: HARDENED & FUNCTIONAL (FINAL)
 # =========================================================
 
 # --- 1. CORE SYSTEM ENTRY POINTS ---
--keep class com.saltatoryimpulse.braingate.GateService { *; }
--keep class com.saltatoryimpulse.braingate.BootReceiver { *; }
+-keep class com.saltatoryimpulse.scrolliosis.GateService { *; }
+-keep class com.saltatoryimpulse.scrolliosis.BootReceiver { *; }
 -keepclassmembers class * extends android.accessibilityservice.AccessibilityService { <init>(...); }
 -keepclassmembers class * extends android.content.BroadcastReceiver { <init>(...); }
 
 # --- 2. ROOM & DATA (SQL MAPPING PROTECTION) ---
 -keep @androidx.room.Entity class *
 -keep interface * extends androidx.room.RoomDatabase
--keep class com.saltatoryimpulse.braingate.KnowledgeEntry { *; }
--keep class com.saltatoryimpulse.braingate.BlockedApp { *; }
--keep interface com.saltatoryimpulse.braingate.KnowledgeDao { *; }
+-keep class com.saltatoryimpulse.scrolliosis.KnowledgeEntry { *; }
+-keep class com.saltatoryimpulse.scrolliosis.BlockedApp { *; }
+-keep interface com.saltatoryimpulse.scrolliosis.KnowledgeDao { *; }
 
 # --- 3. LOG STRIPPING (SECURITY SEAL) ---
 -assumenosideeffects class android.util.Log {
@@ -25,7 +25,7 @@
 
 # --- 4. COMPOSE, LIFECYCLE & OVERLAY STABILITY ---
 -keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
--keep class com.saltatoryimpulse.braingate.FakeLifecycleOwner { *; }
+-keep class com.saltatoryimpulse.scrolliosis.FakeLifecycleOwner { *; }
 
 # Long-form explicit keeps for ViewTree Owners
 -keepnames class androidx.lifecycle.setViewTreeLifecycleOwner { *; }
