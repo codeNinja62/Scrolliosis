@@ -8,6 +8,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioManager
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.ContextCompat
@@ -273,13 +275,7 @@ class GateService : AccessibilityService(), KoinComponent {
 
     private fun triggerHardBlock(packageName: String, targetRoute: String = "gatekeeper_screen") {
         overlayController.showBlockingShield()
-        runCatching { performGlobalAction(GLOBAL_ACTION_HOME) }
-
-        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_HOME)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        startActivity(homeIntent)
+        haltActiveMediaPlayback()
 
         val blockIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -291,11 +287,25 @@ class GateService : AccessibilityService(), KoinComponent {
 
     private fun silentKill() {
         overlayController.showBlockingShield()
-        runCatching { performGlobalAction(GLOBAL_ACTION_HOME) }
-        startActivity(Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_HOME)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        haltActiveMediaPlayback()
+        startActivity(Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         })
+    }
+
+    private fun haltActiveMediaPlayback() {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        dispatchMediaKey(audioManager, KeyEvent.KEYCODE_MEDIA_PAUSE)
+        dispatchMediaKey(audioManager, KeyEvent.KEYCODE_MEDIA_STOP)
+    }
+
+    private fun dispatchMediaKey(audioManager: AudioManager, keyCode: Int) {
+        val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
+        val upEvent = KeyEvent(KeyEvent.ACTION_UP, keyCode)
+        runCatching {
+            audioManager.dispatchMediaKeyEvent(downEvent)
+            audioManager.dispatchMediaKeyEvent(upEvent)
+        }
     }
 
     private fun startUsageStatsMonitor() {
