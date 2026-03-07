@@ -138,9 +138,6 @@ class MainActivity : ComponentActivity(), KoinComponent {
             }
         }
 
-        window.decorView.post {
-            overlayController.removeBlockingShield()
-        }
     }
 
     override fun onResume() {
@@ -196,7 +193,6 @@ class MainActivity : ComponentActivity(), KoinComponent {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        overlayController.removeBlockingShield()
 
         val needsOnboarding = requiresOnboarding()
 

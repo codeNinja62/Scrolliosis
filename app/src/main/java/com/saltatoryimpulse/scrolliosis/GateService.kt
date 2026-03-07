@@ -107,10 +107,6 @@ class GateService : AccessibilityService(), KoinComponent {
         currentForegroundPackage = packageName
         lastForegroundPackage = packageName
 
-        if (packageName == packageName()) {
-            overlayController.removeBlockingShield()
-        }
-
         if (event != null && isProtectedSettingsAttempt(packageName, event)) {
             handleSettingsInterception()
             return
@@ -148,8 +144,8 @@ class GateService : AccessibilityService(), KoinComponent {
             return false
         }
 
-        if (pkg.contains("packageinstaller") || pkg.contains("permissioncontroller")) {
-            return true
+        if (isSelfUninstallFlow(pkg, event)) {
+            return false
         }
 
         val appPackageName = packageName()
@@ -164,6 +160,35 @@ class GateService : AccessibilityService(), KoinComponent {
             scanNodeForAnyText(rootNode, listOf("scrolliosis", appPackageName.lowercase()))
         } catch (e: Exception) {
             Log.w(Constants.TAG, "Error scanning accessibility node tree", e)
+            false
+        } finally {
+            safeReleaseNode(rootNode)
+        }
+    }
+
+    private fun isSelfUninstallFlow(systemPackageName: String, event: AccessibilityEvent): Boolean {
+        if (!systemPackageName.contains("packageinstaller") && !systemPackageName.contains("permissioncontroller")) {
+            return false
+        }
+
+        val appPackageName = packageName().lowercase()
+        val eventText = event.text.toString().lowercase()
+        val containsAppReference = eventText.contains("scrolliosis") || eventText.contains(appPackageName)
+        val containsUninstallKeyword = eventText.contains("uninstall") ||
+            eventText.contains("remove") ||
+            eventText.contains("delete")
+
+        if (containsAppReference && containsUninstallKeyword) {
+            return true
+        }
+
+        val rootNode = rootInActiveWindow ?: return false
+        return try {
+            val uninstallKeywords = listOf("uninstall", "remove", "delete")
+            val appTargets = listOf("scrolliosis", appPackageName)
+            scanNodeForAnyText(rootNode, uninstallKeywords) && scanNodeForAnyText(rootNode, appTargets)
+        } catch (e: Exception) {
+            Log.w(Constants.TAG, "Error evaluating uninstall flow", e)
             false
         } finally {
             safeReleaseNode(rootNode)
@@ -378,6 +403,10 @@ class GateService : AccessibilityService(), KoinComponent {
     }
 
     private fun scheduleServiceRevive() {
+        if (!PermissionUtils.isAccessibilityServiceEnabled(this)) {
+            return
+        }
+
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val reviveIntent = Intent(this, BootReceiver::class.java).apply {
             action = Constants.ACTION_ENSURE_SERVICE

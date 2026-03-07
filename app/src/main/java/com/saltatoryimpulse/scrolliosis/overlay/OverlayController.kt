@@ -25,6 +25,7 @@ class OverlayController(
 ) {
     private var blockingShieldView: View? = null
     private var blockingShieldAttached = false
+    private var blockingShieldVisible = false
     private var customToastView: View? = null
     private var toastJob: Job? = null
 
@@ -34,22 +35,29 @@ class OverlayController(
     fun prepareBlockingShield() {
         scope.launch(Dispatchers.Main) {
             ensureBlockingShieldAttached()
-            blockingShieldView?.visibility = View.INVISIBLE
-            blockingShieldView?.alpha = 0f
+            setBlockingShieldVisible(false)
         }
     }
 
     fun showBlockingShield() {
         scope.launch(Dispatchers.Main) {
             ensureBlockingShieldAttached()
-            blockingShieldView?.visibility = View.VISIBLE
-            blockingShieldView?.alpha = 1f
+            setBlockingShieldVisible(true)
         }
     }
 
     fun removeBlockingShield() {
-        blockingShieldView?.visibility = View.INVISIBLE
-        blockingShieldView?.alpha = 0f
+        scope.launch(Dispatchers.Main) {
+            setBlockingShieldVisible(false)
+        }
+    }
+
+    private fun setBlockingShieldVisible(visible: Boolean) {
+        if (blockingShieldVisible == visible) return
+
+        blockingShieldView?.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+        blockingShieldView?.alpha = if (visible) 1f else 0f
+        blockingShieldVisible = visible
     }
 
     private fun ensureBlockingShieldAttached() {
@@ -90,6 +98,7 @@ class OverlayController(
         }
         blockingShieldView = null
         blockingShieldAttached = false
+        blockingShieldVisible = false
     }
 
     fun showCustomToast(message: String) {

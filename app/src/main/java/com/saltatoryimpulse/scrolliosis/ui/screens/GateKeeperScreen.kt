@@ -90,14 +90,14 @@ fun GatekeeperScreen(
         }
     }
 
-    val appName = remember {
+    val appName = remember(targetPackage) {
         try {
             val info = pm.getApplicationInfo(targetPackage, PackageManager.GET_META_DATA)
             pm.getApplicationLabel(info).toString()
         } catch (e: Exception) { "Distraction" }
     }
 
-    val defaultPrompts = remember {
+    val defaultPrompts = remember(targetPackage, appName) {
         listOf(
             "What thought was in your head right before you tapped this app?",
             "What are you hoping to find in $appName right now?",
@@ -107,9 +107,11 @@ fun GatekeeperScreen(
     }
 
     // BUG-04: prefer user-authored knowledge prompts; fall back to defaults if vault is empty
-    var currentPrompt by remember { mutableStateOf(defaultPrompts.random()) }
-    var promptLabel by remember { mutableStateOf("MINDFULNESS CHECK") }
-    LaunchedEffect(Unit) {
+    var currentPrompt by remember(targetPackage) { mutableStateOf(defaultPrompts.random()) }
+    var promptLabel by remember(targetPackage) { mutableStateOf("MINDFULNESS CHECK") }
+    LaunchedEffect(targetPackage) {
+        currentPrompt = defaultPrompts.random()
+        promptLabel = "MINDFULNESS CHECK"
         val customPrompt = withContext(Dispatchers.IO) { repository.getRandomCustomPrompt() }
         if (customPrompt != null) {
             currentPrompt = customPrompt.summary
@@ -117,7 +119,7 @@ fun GatekeeperScreen(
         }
     }
 
-    var reflectionText by remember { mutableStateOf("") }
+    var reflectionText by remember(targetPackage) { mutableStateOf("") }
     val minCharacters = 80
     val isReadyToUnlock = reflectionText.trim().length >= minCharacters
 
